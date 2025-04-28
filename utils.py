@@ -11,6 +11,7 @@ import librosa
 import matplotlib.pyplot as plt
 from munch import Munch
 
+
 def maximum_path(neg_cent, mask):
   """ Cython optimized version.
   neg_cent: [b, t_t, t_s]
@@ -26,6 +27,7 @@ def maximum_path(neg_cent, mask):
   maximum_path_c(path, neg_cent, t_t_max, t_s_max)
   return torch.from_numpy(path).to(device=device, dtype=dtype)
 
+
 def get_data_path_list(train_path=None, val_path=None):
     if train_path is None:
         train_path = "Data/train_list.txt"
@@ -39,10 +41,12 @@ def get_data_path_list(train_path=None, val_path=None):
 
     return train_list, val_list
 
+
 def length_to_mask(lengths):
     mask = torch.arange(lengths.max()).unsqueeze(0).expand(lengths.shape[0], -1).type_as(lengths)
     mask = torch.gt(mask+1, lengths.unsqueeze(1))
     return mask
+
 
 # for norm consistency loss
 def log_norm(x, mean=-4, std=4, dim=2):
@@ -52,6 +56,7 @@ def log_norm(x, mean=-4, std=4, dim=2):
     x = torch.log(torch.exp(x * std + mean).norm(dim=dim))
     return x
 
+
 def get_image(arrs):
     plt.switch_backend('agg')
     fig = plt.figure()
@@ -60,6 +65,7 @@ def get_image(arrs):
 
     return fig
 
+
 def recursive_munch(d):
     if isinstance(d, dict):
         return Munch((k, recursive_munch(v)) for k, v in d.items())
@@ -67,7 +73,8 @@ def recursive_munch(d):
         return [recursive_munch(v) for v in d]
     else:
         return d
-    
+
+
 def log_print(message, logger):
     logger.info(message)
     print(message)
