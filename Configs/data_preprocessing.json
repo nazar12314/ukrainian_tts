@@ -1,11 +1,14 @@
 {
   "train_data": "Data/train_list.txt",
   "val_data": "Data/val_list.txt",
-  "root_path": "Data/wavs",
-  "num_speakers": 1,
+  "root_path": "Data/wavs/",
+  "num_speakers": 2,
   "data_path": "recording.wav",
   "reference_path": "reference.wav",
+  "max_length": 10,
+  "min_length": 3,
   "sr": 16000,
+  "train_split": 0.8,
 
   "diarization": {
     "model": "pyannote/speaker-diarization@2.1"

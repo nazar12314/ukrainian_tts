@@ -1,7 +1,6 @@
 import math
 import torch.nn as nn
 import torch.nn.functional as F
-import logging
 
 from torch.nn.utils import weight_norm, spectral_norm
 from transformers import AlbertModel
@@ -18,18 +17,10 @@ from Modules.diffusion import (StyleTransformer1d, AudioDiffusionConditional,
                                DiffusionSampler, ADPM2Sampler, KarrasSchedule)
 
 from Utils.model_utils import *
+from logger import setup_logging
 
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-console_handler.setFormatter(formatter)
-
-logger.addHandler(console_handler)
+logger = setup_logging(__name__)
 
 
 class CustomAlbert(AlbertModel):

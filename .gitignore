@@ -3,3 +3,7 @@ __pycache__
 .DS_Store
 logs
 Data
+checkpoints
+models
+examples
+styles

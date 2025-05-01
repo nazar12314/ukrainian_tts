@@ -19,3 +19,5 @@ pytorch-lightning
 pandas
 tensorboard
 litmodels
+speechbrain
+pyannote.audio
