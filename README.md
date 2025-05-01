@@ -70,6 +70,7 @@ To prepare your dataset for fine-tuning StyleTTS2, use the `data_preprocessing.p
 - Outputs processed audio chunks, together with training and validation file lists in the expected format.
 
 #### Usage:
+Before launching script, make sure that you set hf_token while instantiating DataPreprocessor object.
 
 ```bash
 python3 data_preprocessing.py
@@ -77,7 +78,7 @@ python3 data_preprocessing.py
 
 Make sure to update the config path inside the script if needed:
 
-```processor = DataPreprocessor("Configs/data_preprocessing.json")```
+```processor = DataPreprocessor("Configs/data_preprocessing.json", hf_token=<your token>)```
 
 or adjust already created config file. 
 
