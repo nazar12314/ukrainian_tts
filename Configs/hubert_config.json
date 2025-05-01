@@ -1,0 +1,14 @@
+{
+  "sr": 16000,
+  "max_length": 48000,
+  "extractor_path": "facebook/hubert-base-ls960",
+  "model_path": "amiriparian/ExHuBERT",
+  "emotion_map": {
+    "0": "negative",
+    "1": "neutral",
+    "2": "positive",
+    "3": "negative",
+    "4": "neutral",
+    "5": "positive"
+  }
+}

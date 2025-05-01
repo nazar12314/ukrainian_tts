@@ -16,3 +16,6 @@ typing
 typing-extensions
 git+https://github.com/resemble-ai/monotonic_align.git
 pytorch-lightning
+pandas
+tensorboard
+litmodels

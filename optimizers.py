@@ -1,12 +1,7 @@
-#coding:utf-8
-import os, sys
-import os.path as osp
-import numpy as np
 import torch
-from torch import nn
-from torch.optim import Optimizer
 from functools import reduce
 from torch.optim import AdamW
+
 
 class MultiOptimizer:
     def __init__(self, optimizers={}, schedulers={}):
@@ -24,7 +19,7 @@ class MultiOptimizer:
         for key, val in state_dict:
             try:
                 self.optimizers[key].load_state_dict(val)
-            except:
+            except Exception as e:
                 print("Unloaded %s" % key)
 
     def step(self, key=None, scaler=None):
@@ -50,6 +45,7 @@ class MultiOptimizer:
         else:
             _ = [self.schedulers[key].step(*args) for key in self.keys]
 
+
 def define_scheduler(optimizer, params):
     scheduler = torch.optim.lr_scheduler.OneCycleLR(
         optimizer,
@@ -62,6 +58,7 @@ def define_scheduler(optimizer, params):
 
     return scheduler
 
+
 def build_optimizer(parameters_dict, scheduler_params_dict, lr):
     optim = dict([(key, AdamW(params, lr=lr, weight_decay=1e-4, betas=(0.0, 0.99), eps=1e-9))
                    for key, params in parameters_dict.items()])
@@ -70,4 +67,5 @@ def build_optimizer(parameters_dict, scheduler_params_dict, lr):
                        for key, opt in optim.items()])
 
     multi_optim = MultiOptimizer(optim, schedulers)
+
     return multi_optim

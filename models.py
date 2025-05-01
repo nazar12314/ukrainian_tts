@@ -1,10 +1,35 @@
 import math
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import logging
 
 from torch.nn.utils import weight_norm, spectral_norm
 from transformers import AlbertModel
+
+from utils import *
+from Modules.hifigan import Decoder
+from Modules.discriminators import (MultiPeriodDiscriminator, MultiResSpecDiscriminator,
+                                    WavLMDiscriminator)
+from Utils.ASR.models import ASRCNN
+from transformers import AlbertConfig
+from Utils.JDC.model import JDCNet
+from Modules.diffusion import (StyleTransformer1d, AudioDiffusionConditional,
+                               KDiffusion, LogNormalDistribution,
+                               DiffusionSampler, ADPM2Sampler, KarrasSchedule)
+
+from Utils.model_utils import *
+
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+console_handler.setFormatter(formatter)
+
+logger.addHandler(console_handler)
 
 
 class CustomAlbert(AlbertModel):
@@ -589,3 +614,120 @@ class DurationEncoder(nn.Module):
         mask = torch.gt(mask + 1, lengths.unsqueeze(1))
 
         return mask
+
+
+class Tokenizer:
+    def __init__(self, vocab):
+        self.word_index_dictionary = {phoneme: i for i, phoneme in enumerate(vocab)}
+
+    def __call__(self, text):
+        indexes = []
+
+        for char in text:
+            try:
+                indexes.append(self.word_index_dictionary[char])
+            except KeyError:
+                print(text)
+
+        return indexes
+
+
+class StyleTTS2(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        self.cfg = config
+
+        self.model_state = torch.load(self.cfg.pretrained_model, map_location='cpu', weights_only=True)
+        self.model_weights = self.model_state["net"] if "net" in self.model_state else self.model_state
+
+        assert self.cfg.model_params.decoder.type == 'hifigan', 'Decoder type unknown'
+
+        self.initialize_modules(self.cfg.model_params)
+        self.load_pretrained()
+
+    def initialize_modules(self, args):
+        text_aligner = ASRCNN(**args.text_aligner)
+        bert = CustomAlbert(AlbertConfig(**args.bert))
+        pitch_extractor = JDCNet(num_class=1, seq_len=192)
+
+        decoder = Decoder(dim_in=args.hidden_dim, style_dim=args.style_dim, dim_out=args.n_mels,
+                          resblock_kernel_sizes=args.decoder.resblock_kernel_sizes,
+                          upsample_rates=args.decoder.upsample_rates,
+                          upsample_initial_channel=args.decoder.upsample_initial_channel,
+                          resblock_dilation_sizes=args.decoder.resblock_dilation_sizes,
+                          upsample_kernel_sizes=args.decoder.upsample_kernel_sizes
+                          )
+
+        text_encoder = TextEncoder(
+            channels=args.hidden_dim, kernel_size=5,
+            depth=args.n_layer, n_symbols=args.n_token
+        )
+
+        predictor = ProsodyPredictor(
+            style_dim=args.style_dim, d_hid=args.hidden_dim,
+            nlayers=args.n_layer, max_dur=args.max_dur, dropout=args.dropout
+        )
+
+        style_encoder = StyleEncoder(
+            dim_in=args.dim_in, style_dim=args.style_dim, max_conv_dim=args.hidden_dim
+        )
+
+        predictor_encoder = StyleEncoder(
+            dim_in=args.dim_in, style_dim=args.style_dim, max_conv_dim=args.hidden_dim
+        )
+
+        transformer = StyleTransformer1d(
+            channels=args.style_dim * 2, context_embedding_features=bert.config.hidden_size,
+            context_features=args.style_dim * 2, **args.diffusion.transformer
+        )
+
+        diffusion = AudioDiffusionConditional(
+            in_channels=1, embedding_max_length=bert.config.max_position_embeddings,
+            embedding_features=bert.config.hidden_size,
+            embedding_mask_proba=args.diffusion.embedding_mask_proba,
+            channels=args.style_dim * 2, context_features=args.style_dim * 2,
+        )
+
+        diffusion.diffusion = KDiffusion(
+            net=diffusion.unet,
+            sigma_distribution=LogNormalDistribution(mean=args.diffusion.dist.mean, std=args.diffusion.dist.std),
+            sigma_data=args.diffusion.dist.sigma_data, dynamic_threshold=0.0
+        )
+
+        diffusion.diffusion.net = transformer
+        diffusion.unet = transformer
+
+        sampler = DiffusionSampler(
+            diffusion.diffusion,
+            sampler=ADPM2Sampler(),
+            sigma_schedule=KarrasSchedule(sigma_min=0.0001, sigma_max=3.0, rho=9.0),
+            clamp=False
+        )
+
+        self.add_module("text_aligner", text_aligner)
+        self.add_module("bert", bert)
+        self.add_module("pitch_extractor", pitch_extractor)
+
+        self.add_module("decoder", decoder)
+        self.add_module("text_encoder", text_encoder)
+        self.add_module("predictor", predictor)
+        self.add_module("style_encoder", style_encoder)
+        self.add_module("predictor_encoder", predictor_encoder)
+        self.add_module("bert_encoder", nn.Linear(self.bert.config.hidden_size, args.hidden_dim))
+
+        self.add_module("diffusion", diffusion)
+        self.add_module("sampler", sampler)
+
+        self.add_module("mpd", MultiPeriodDiscriminator())
+        self.add_module("msd", MultiResSpecDiscriminator())
+        self.add_module("wd", WavLMDiscriminator(args.slm.hidden, args.slm.nlayers, args.slm.initial_channel))
+
+    def load_pretrained(self):
+        for k, v in self.model_weights.items():
+            module = getattr(self, k)
+            module.load_state_dict(clean_state_dict(v), strict=False)
+            logger.info(f"Loaded {k} weights")
+
+        for key, value in self.named_children():
+            value.eval()

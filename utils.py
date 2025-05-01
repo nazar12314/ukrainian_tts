@@ -1,31 +1,26 @@
-from monotonic_align import maximum_path
-from monotonic_align import mask_from_lens
-from monotonic_align.core import maximum_path_c
 import numpy as np
 import torch
-import copy
-from torch import nn
-import torch.nn.functional as F
-import torchaudio
-import librosa
 import matplotlib.pyplot as plt
+
 from munch import Munch
+from monotonic_align.core import maximum_path_c
 
 
 def maximum_path(neg_cent, mask):
-  """ Cython optimized version.
-  neg_cent: [b, t_t, t_s]
-  mask: [b, t_t, t_s]
-  """
-  device = neg_cent.device
-  dtype = neg_cent.dtype
-  neg_cent =  np.ascontiguousarray(neg_cent.data.cpu().numpy().astype(np.float32))
-  path =  np.ascontiguousarray(np.zeros(neg_cent.shape, dtype=np.int32))
+    """
+    Cython optimized version.
+    neg_cent: [b, t_t, t_s]
+    mask: [b, t_t, t_s]
+    """
+    device = neg_cent.device
+    dtype = neg_cent.dtype
+    neg_cent = np.ascontiguousarray(neg_cent.data.cpu().numpy().astype(np.float32))
+    path = np.ascontiguousarray(np.zeros(neg_cent.shape, dtype=np.int32))
 
-  t_t_max = np.ascontiguousarray(mask.sum(1)[:, 0].data.cpu().numpy().astype(np.int32))
-  t_s_max = np.ascontiguousarray(mask.sum(2)[:, 0].data.cpu().numpy().astype(np.int32))
-  maximum_path_c(path, neg_cent, t_t_max, t_s_max)
-  return torch.from_numpy(path).to(device=device, dtype=dtype)
+    t_t_max = np.ascontiguousarray(mask.sum(1)[:, 0].data.cpu().numpy().astype(np.int32))
+    t_s_max = np.ascontiguousarray(mask.sum(2)[:, 0].data.cpu().numpy().astype(np.int32))
+    maximum_path_c(path, neg_cent, t_t_max, t_s_max)
+    return torch.from_numpy(path).to(device=device, dtype=dtype)
 
 
 def get_data_path_list(train_path=None, val_path=None):
@@ -44,7 +39,7 @@ def get_data_path_list(train_path=None, val_path=None):
 
 def length_to_mask(lengths):
     mask = torch.arange(lengths.max()).unsqueeze(0).expand(lengths.shape[0], -1).type_as(lengths)
-    mask = torch.gt(mask+1, lengths.unsqueeze(1))
+    mask = torch.gt(mask + 1, lengths.unsqueeze(1))
     return mask
 
 
@@ -78,4 +73,3 @@ def recursive_munch(d):
 def log_print(message, logger):
     logger.info(message)
     print(message)
-    

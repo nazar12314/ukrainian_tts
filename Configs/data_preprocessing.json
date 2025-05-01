@@ -1,0 +1,21 @@
+{
+  "train_data": "Data/train_list.txt",
+  "val_data": "Data/val_list.txt",
+  "root_path": "Data/wavs",
+  "num_speakers": 1,
+  "data_path": "recording.wav",
+  "reference_path": "reference.wav",
+  "sr": 16000,
+
+  "diarization": {
+    "model": "pyannote/speaker-diarization@2.1"
+  },
+
+  "similarity": {
+    "model": "speechbrain/spkrec-ecapa-voxceleb"
+  },
+
+  "asr": {
+    "model": "Yehor/w2v-bert-uk-v2.1"
+  }
+}

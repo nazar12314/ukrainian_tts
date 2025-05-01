@@ -8,6 +8,7 @@ from .utils import get_padding
 
 LRELU_SLOPE = 0.1
 
+
 def stft(x, fft_size, hop_size, win_length, window):
     """Perform STFT and convert to magnitude spectrogram.
     Args:
@@ -25,6 +26,7 @@ def stft(x, fft_size, hop_size, win_length, window):
     imag = x_stft[..., 1]
 
     return torch.abs(x_stft).transpose(2, 1)
+
 
 class SpecDiscriminator(nn.Module):
     """docstring for Discriminator."""
@@ -61,6 +63,7 @@ class SpecDiscriminator(nn.Module):
         fmap.append(y)
 
         return torch.flatten(y, 1, -1), fmap
+
 
 class MultiResSpecDiscriminator(torch.nn.Module):
 
@@ -154,7 +157,8 @@ class MultiPeriodDiscriminator(torch.nn.Module):
             fmap_gs.append(fmap_g)
 
         return y_d_rs, y_d_gs, fmap_rs, fmap_gs
-    
+
+
 class WavLMDiscriminator(nn.Module):
     """docstring for Discriminator."""
 

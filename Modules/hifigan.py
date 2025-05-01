@@ -9,7 +9,9 @@ import math
 import random
 import numpy as np 
 
+
 LRELU_SLOPE = 0.1
+
 
 class AdaIN1d(nn.Module):
     def __init__(self, style_dim, num_features):
@@ -22,6 +24,7 @@ class AdaIN1d(nn.Module):
         h = h.view(h.size(0), h.size(1), 1)
         gamma, beta = torch.chunk(h, chunks=2, dim=1)
         return (1 + gamma) * self.norm(x) + beta
+
 
 class AdaINResBlock1(torch.nn.Module):
     def __init__(self, channels, kernel_size=3, dilation=(1, 3, 5), style_dim=64):
@@ -60,7 +63,6 @@ class AdaINResBlock1(torch.nn.Module):
         
         self.alpha1 = nn.ParameterList([nn.Parameter(torch.ones(1, channels, 1)) for i in range(len(self.convs1))])
         self.alpha2 = nn.ParameterList([nn.Parameter(torch.ones(1, channels, 1)) for i in range(len(self.convs2))])
-
 
     def forward(self, x, s):
         for c1, c2, n1, n2, a1, a2 in zip(self.convs1, self.convs2, self.adain1, self.adain2, self.alpha1, self.alpha2):
@@ -413,6 +415,7 @@ class UpSample1d(nn.Module):
         else:
             return F.interpolate(x, scale_factor=2, mode='nearest')
 
+
 class Decoder(nn.Module):
     def __init__(self, dim_in=512, F0_channel=512, style_dim=64, dim_out=80, 
                 resblock_kernel_sizes = [3,7,11],
@@ -438,10 +441,8 @@ class Decoder(nn.Module):
         self.asr_res = nn.Sequential(
             weight_norm(nn.Conv1d(512, 64, kernel_size=1)),
         )
-        
-        
-        self.generator = Generator(style_dim, resblock_kernel_sizes, upsample_rates, upsample_initial_channel, resblock_dilation_sizes, upsample_kernel_sizes)
 
+        self.generator = Generator(style_dim, resblock_kernel_sizes, upsample_rates, upsample_initial_channel, resblock_dilation_sizes, upsample_kernel_sizes)
         
     def forward(self, asr, F0_curve, N, s):
         if self.training:
@@ -449,11 +450,11 @@ class Decoder(nn.Module):
             F0_down = downlist[random.randint(0, 2)]
             downlist = [0, 3, 7, 15]
             N_down = downlist[random.randint(0, 3)]
-            if F0_down:
-                F0_curve = nn.functional.conv1d(F0_curve.unsqueeze(1), torch.ones(1, 1, F0_down).to('cuda'), padding=F0_down//2).squeeze(1) / F0_down
-            if N_down:
-                N = nn.functional.conv1d(N.unsqueeze(1), torch.ones(1, 1, N_down).to('cuda'), padding=N_down//2).squeeze(1)  / N_down
 
+            if F0_down:
+                F0_curve = nn.functional.conv1d(F0_curve.unsqueeze(1), torch.ones(1, 1, F0_down).to("cpu"), padding=F0_down//2).squeeze(1) / F0_down
+            if N_down:
+                N = nn.functional.conv1d(N.unsqueeze(1), torch.ones(1, 1, N_down).to("cpu"), padding=N_down//2).squeeze(1) / N_down
         
         F0 = self.F0_conv(F0_curve.unsqueeze(1))
         N = self.N_conv(N.unsqueeze(1))
@@ -473,5 +474,3 @@ class Decoder(nn.Module):
                 
         x = self.generator(x, s, F0_curve)
         return x
-    
-    

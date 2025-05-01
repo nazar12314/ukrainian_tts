@@ -1,48 +1,20 @@
-#coding: utf-8
-import os
 import os.path as osp
-import time
-import random
 import numpy as np
 import random
 import soundfile as sf
 import librosa
-
-import torch
-from torch import nn
-import torch.nn.functional as F
-import torchaudio
-from torch.utils.data import DataLoader
-
+import pandas as pd
 import logging
+import torch
+import torchaudio
+
+from torch.utils.data import DataLoader
+from models import Tokenizer
+
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-import pandas as pd
-
-_pad = "$"
-_punctuation = ';:,.!?¡¿—…"«»“” '
-_letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
-_letters_ipa = "ɑɐɒæɓʙβɔɕçɗɖðʤəɘɚɛɜɝɞɟʄɡɠɢʛɦɧħɥʜɨɪʝɭɬɫɮʟɱɯɰŋɳɲɴøɵɸθœɶʘɹɺɾɻʀʁɽʂʃʈʧʉʊʋⱱʌɣɤʍχʎʏʑʐʒʔʡʕʢǀǁǂǃˈˌːˑʼʴʰʱʲʷˠˤ˞↓↑→↗↘'̩'ᵻ"
-
-# Export all symbols:
-symbols = [_pad] + list(_punctuation) + list(_letters) + list(_letters_ipa)
-
-dicts = {}
-for i in range(len((symbols))):
-    dicts[symbols[i]] = i
-
-class TextCleaner:
-    def __init__(self, dummy=None):
-        self.word_index_dictionary = dicts
-    def __call__(self, text):
-        indexes = []
-        for char in text:
-            try:
-                indexes.append(self.word_index_dictionary[char])
-            except KeyError:
-                print(text)
-        return indexes
 
 np.random.seed(1)
 random.seed(1)
@@ -59,29 +31,26 @@ to_mel = torchaudio.transforms.MelSpectrogram(
     n_mels=80, n_fft=2048, win_length=1200, hop_length=300)
 mean, std = -4, 4
 
+
 def preprocess(wave):
     wave_tensor = torch.from_numpy(wave).float()
     mel_tensor = to_mel(wave_tensor)
     mel_tensor = (torch.log(1e-5 + mel_tensor.unsqueeze(0)) - mean) / std
     return mel_tensor
 
+
 class FilePathDataset(torch.utils.data.Dataset):
     def __init__(self,
                  data_list,
                  root_path,
+                 vocab,
                  sr=24000,
                  data_augmentation=False,
                  validation=False,
-                 OOD_data="Data/OOD_texts.txt",
-                 min_length=50,
                  ):
-
-        spect_params = SPECT_PARAMS
-        mel_params = MEL_PARAMS
-
         _data_list = [l.strip().split('|') for l in data_list]
         self.data_list = [data if len(data) == 3 else (*data, 0) for data in _data_list]
-        self.text_cleaner = TextCleaner()
+        self.text_cleaner = Tokenizer(vocab)
         self.sr = sr
 
         self.df = pd.DataFrame(self.data_list)
@@ -91,12 +60,6 @@ class FilePathDataset(torch.utils.data.Dataset):
         self.mean, self.std = -4, 4
         self.data_augmentation = data_augmentation and (not validation)
         self.max_mel_length = 192
-        
-        self.min_length = min_length
-        with open(OOD_data, 'r', encoding='utf-8') as f:
-            tl = f.readlines()
-        idx = 1 if '.wav' in tl[0].split('|')[0] else 0
-        self.ptexts = [t.split('|')[idx] for t in tl]
         
         self.root_path = root_path
 
@@ -119,19 +82,7 @@ class FilePathDataset(torch.utils.data.Dataset):
         ref_data = (self.df[self.df[2] == str(speaker_id)]).sample(n=1).iloc[0].tolist()
         ref_mel_tensor, ref_label = self._load_data(ref_data[:3])
         
-        # get OOD text
-        
-        ps = ""
-        
-        while len(ps) < self.min_length:
-            rand_idx = np.random.randint(0, len(self.ptexts) - 1)
-            ps = self.ptexts[rand_idx]
-            
-            text = self.text_cleaner(ps)
-            text.insert(0, 0)
-            text.append(0)
-
-            ref_text = torch.LongTensor(text)
+        ref_text = text_tensor
         
         return speaker_id, acoustic_feature, text_tensor, ref_text, ref_mel_tensor, ref_label, path, wave
 
@@ -143,7 +94,6 @@ class FilePathDataset(torch.utils.data.Dataset):
             wave = wave[:, 0].squeeze()
         if sr != 24000:
             wave = librosa.resample(wave, orig_sr=sr, target_sr=24000)
-            print(wave_path, sr)
             
         wave = np.concatenate([np.zeros([5000]), wave, np.zeros([5000])], axis=0)
         
@@ -229,19 +179,18 @@ class Collater(object):
         return waves, texts, input_lengths, ref_texts, ref_lengths, mels, output_lengths, ref_mels
 
 
-
 def build_dataloader(path_list,
                      root_path,
+                     vocab,
                      validation=False,
-                     OOD_data="Data/OOD_texts.txt",
-                     min_length=50,
                      batch_size=4,
                      num_workers=1,
                      device='cpu',
                      collate_config={},
                      dataset_config={}):
     
-    dataset = FilePathDataset(path_list, root_path, OOD_data=OOD_data, min_length=min_length, validation=validation, **dataset_config)
+    dataset = FilePathDataset(path_list, root_path, vocab, validation=validation, **dataset_config)
+
     collate_fn = Collater(**collate_config)
     data_loader = DataLoader(dataset,
                              batch_size=batch_size,
